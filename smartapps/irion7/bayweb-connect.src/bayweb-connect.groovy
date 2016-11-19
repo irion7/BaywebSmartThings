@@ -7,8 +7,8 @@ definition(
 		author: "Josh Leavitt",
 		description: "Connect your Bayweb thermostat to SmartThings.",
 		category: "Convenience",
-		iconUrl: "https://s3.amazonaws.com/smartapp-icons/Meta/light_thermo-switch.png",
-		iconX2Url:  "https://s3.amazonaws.com/smartapp-icons/Meta/light_thermo-switch@2x.png",
+		iconUrl: "http://cdn.device-icons.smartthings.com/Home/home1-icn.png",
+		iconX2Url:  "http://cdn.device-icons.smartthings.com/Home/home1-icn@2x.png",
 		singleInstance: true
 )
 
@@ -40,39 +40,6 @@ def confirmBayweb() {
     	def stats = getBaywebThermostats()
 		log.debug "thermostat list: $stats"
     }
-}
-
-def callback() {
-	log.debug "callback()>> params: $params, params.code ${params.code}"
-
-	def code = params.code
-	def oauthState = params.state
-
-	if (oauthState == atomicState.oauthInitState) {
-		def tokenParams = [
-			grant_type: "authorization_code",
-			code      : code,
-			client_id : smartThingsClientId,
-			redirect_uri: callbackUrl
-		]
-
-		def tokenUrl = "https://www.bayweb.com/home/token?${toQueryString(tokenParams)}"
-
-		httpPost(uri: tokenUrl) { resp ->
-			atomicState.refreshToken = resp.data.refresh_token
-			atomicState.authToken = resp.data.access_token
-		}
-
-		if (atomicState.authToken) {
-			success()
-		} else {
-			fail()
-		}
-
-	} else {
-		log.error "callback() failed oauthState != atomicState.oauthInitState"
-	}
-
 }
 
 def success() {
@@ -238,45 +205,8 @@ def addDevice() {
 	pollHandler() //first time polling data data from thermostat
 
 	//automatically update devices status every 5 mins
-	runEvery5Minutes("poll")
+	runEvery10Minutes("poll")
 }
-
-/*
-def initialize() {
-	log.debug "initialize"
-	def devices = thermostats.collect { dni ->
-    	log.debug "initialize devices $devices"
-		def d = getChildDevice(dni)
-        log.debug "device $d"
-		if(!d) {
-			d = addChildDevice(app.namespace, getChildName(), dni, null, ["label":"${atomicState.thermostats[dni]}" ?: "Bayweb Thermostat"])
-			log.debug "created ${d.displayName} with id $dni"
-		} else {
-			log.debug "found ${d.displayName} with id $dni already exists"
-		}
-		return d
-	}
-
-	def delete  // Delete any that are no longer in settings
-	if(!thermostats) {
-		log.debug "delete thermostats"
-		delete = getAllChildDevices() //inherits from SmartApp (data-management)
-	}
-	log.warn "delete: ${delete}, deleting ${delete.size()} thermostats"
-	delete.each { deleteChildDevice(it.deviceNetworkId) } //inherits from SmartApp (data-management)
-
-	//send activity feeds to tell that device is connected
-	def notificationMessage = "is connected to SmartThings"
-	sendActivityFeeds(notificationMessage)
-	atomicState.timeSendPush = null
-	atomicState.reAttempt = 0
-
-	pollHandler() //first time polling data data from thermostat
-
-	//automatically update devices status every 5 mins
-	runEvery5Minutes("poll")
-
-} */
 
 def pollHandler() {
 	log.debug "pollHandler()"
@@ -666,7 +596,7 @@ private void storeThermostatData(thermostats) {
             activity: thermostats.act,
             activitySetpoint: thermostats.act_sp,
             mode: thermostats.mode,
-            hold: thermostats.hold,
+            hold: baywebHoldCodeToModeName(thermostats.hold),
             thermostatOperatingState: getThermostatOperatingState(thermostats)
         ]
 
@@ -679,6 +609,14 @@ private void storeThermostatData(thermostats) {
     
     atomicState.thermostats = collector
     log.debug "updated ${atomicState.thermostats?.size()} thermostats: ${atomicState.thermostats}"
+}
+
+//smartthings api states are: "auto" "emergency heat" "heat" "off" "cool"
+def baywebHoldCodeToModeName(holdcode) {
+	if(holdcode == 1)
+    	return "on"
+    else 
+    	return "off"
 }
 
 //smartthings api states are: "auto" "emergency heat" "heat" "off" "cool"
